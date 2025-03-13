@@ -1,123 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
 import { useFetchAdvocates } from "./hooks/useFetchAdvocates";
-import { Advocate } from "@/types";
+import { columns } from "../components/molecules/columns";
+import { DataTable } from "@/components/molecules/data-table";
+import { DataTableToolbar } from "@/components/molecules/data-table-toolbar";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  FilterFn,
+} from "@tanstack/react-table";
+
+// Custom filter function that searches across multiple fields
+const customGlobalFilter: FilterFn<any> = (row, columnId, value) => {
+  const searchValue = value.toLowerCase();
+  
+  // Get values from specific fields we want to search
+  const firstName = String(row.getValue("firstName") || "").toLowerCase();
+  const lastName = String(row.getValue("lastName") || "").toLowerCase();
+  const city = String(row.getValue("city") || "").toLowerCase();
+  const degree = String(row.getValue("degree") || "").toLowerCase();
+  const phoneNumber = String(row.getValue("phoneNumber") || "").toLowerCase();
+  
+  // Get specialties array from the original row data
+  const specialties = row.original.specialties || [];
+  const hasMatchingSpecialty = Array.isArray(specialties) && 
+    specialties.some((specialty: string) => 
+      specialty.toLowerCase().includes(searchValue)
+    );
+  
+  // Return true if any field contains the search value
+  return (
+    firstName.includes(searchValue) ||
+    lastName.includes(searchValue) ||
+    city.includes(searchValue) ||
+    degree.includes(searchValue) ||
+    phoneNumber.includes(searchValue) ||
+    hasMatchingSpecialty
+  );
+};
 
 export default function Home() {
-  const [filteredAdvocates, setFilteredAdvocates] = useState<Advocate[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>("");
-
   const { data: advocates = [], isLoading, error } = useFetchAdvocates();
+  const [globalFilter, setGlobalFilter] = useState<string>("");
 
-  // Initialize filtered advocates when data is loaded
-  useEffect(() => {
-    if (advocates.length > 0) {
-      setFilteredAdvocates(advocates);
-    }
-  }, [advocates]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newSearchTerm = e.target.value;
-    setSearchTerm(newSearchTerm);
-
-    if (!newSearchTerm.trim()) {
-      setFilteredAdvocates(advocates);
-      return;
-    }
-
-    const filtered = advocates.filter((advocate) => {
-      const searchTermLower = newSearchTerm.toLowerCase();
-      return (
-        advocate.firstName.toLowerCase().includes(searchTermLower) ||
-        advocate.lastName.toLowerCase().includes(searchTermLower) ||
-        advocate.city.toLowerCase().includes(searchTermLower) ||
-        advocate.degree.toLowerCase().includes(searchTermLower) ||
-        (Array.isArray(advocate.specialties) && advocate.specialties.some((specialty: string) => 
-          specialty.toLowerCase().includes(searchTermLower)
-        )) ||
-        advocate.yearsOfExperience.toString().includes(newSearchTerm)
-      );
-    });
-
-    setFilteredAdvocates(filtered);
-  };
-
-  const handleReset = () => {
-    setFilteredAdvocates(advocates);
-    setSearchTerm("");
-  };
+  // Initialize TanStack Table for global filtering
+  const table = useReactTable({
+    data: advocates,
+    columns,
+    filterFns: {
+      customGlobalFilter,
+    },
+    state: {
+      globalFilter,
+    },
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: customGlobalFilter,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
 
   return (
     <main className="container mx-auto py-6 px-4">
       <h1 className="text-3xl font-bold mb-6">Solace Advocates</h1>
       
-      <div className="mb-8">
-        <p className="text-sm font-medium mb-2">Search</p>
-        <p className="text-sm mb-2">
-          Searching for: <span className="font-medium">{searchTerm}</span>
-        </p>
-        <div className="flex gap-2">
-          <Input 
-            value={searchTerm}
-            onChange={handleChange} 
-            placeholder="Search by name, city, degree, or specialty"
-          />
-          <Button 
-            onClick={handleReset}
-          >
-            Reset Search
-          </Button>
-        </div>
-      </div>
-      
       {isLoading ? (
-        <div className="text-center py-8">Loading advocates...</div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-lg font-medium">Loading advocates...</div>
+          </div>
+        </div>
       ) : error ? (
-        <div className="text-center py-8 text-red-500">Error loading advocates: {error.message}</div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center text-red-500">
+            <div className="text-lg font-medium">Error loading advocates</div>
+            <div className="text-sm">{error.message}</div>
+          </div>
+        </div>
       ) : (
-        <Table>
-          <TableCaption>List of Solace Advocates</TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead>First Name</TableHead>
-              <TableHead>Last Name</TableHead>
-              <TableHead>City</TableHead>
-              <TableHead>Degree</TableHead>
-              <TableHead>Specialties</TableHead>
-              <TableHead>Years of Experience</TableHead>
-              <TableHead>Phone Number</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredAdvocates.map((advocate, index) => (
-              <TableRow key={advocate.id || index}>
-                <TableCell>{advocate.firstName}</TableCell>
-                <TableCell>{advocate.lastName}</TableCell>
-                <TableCell>{advocate.city}</TableCell>
-                <TableCell>{advocate.degree}</TableCell>
-                <TableCell>
-                  {Array.isArray(advocate.specialties) && advocate.specialties.map((specialty: string, idx: number) => (
-                    <div key={`${specialty}-${idx}`}>{specialty}</div>
-                  ))}
-                </TableCell>
-                <TableCell>{advocate.yearsOfExperience}</TableCell>
-                <TableCell>{advocate.phoneNumber.toString()}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <div className="space-y-4">
+          <DataTableToolbar 
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            searchPlaceholder="Search by name, city, degree, phone number, or specialty..."
+          />
+          <DataTable 
+            columns={columns} 
+            data={table.getFilteredRowModel().rows.map(row => row.original)} 
+          />
+        </div>
       )}
     </main>
   );
